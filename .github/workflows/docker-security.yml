@@ -1,0 +1,237 @@
+name: "Docker Security Pipeline — Master DevOps"
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # ── Job 1 : Détection de secrets ──────────────────────────
+  secret-scanning:
+    name: "Secret Scanning (Gitleaks)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # Historique complet pour Gitleaks
+
+      - name: Gitleaks — Scan de l historique Git
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Job 2 : Lint du Dockerfile ────────────────────────────
+  lint-dockerfile:
+    name: "Lint Dockerfile (Hadolint)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Hadolint — Dockerfile vulnérable (warnings attendus)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: error   # Bloque seulement sur ERROR
+        continue-on-error: true      # Ne bloque pas le pipeline pour le TP
+
+      - name: Hadolint — Dockerfile sécurisé (doit passer)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile.hardened
+          failure-threshold: warning
+
+  # ── Job 3 : Analyse SAST du code source ──────────────────
+  sast-scan:
+    name: "SAST — Bandit + Semgrep"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Installer les outils SAST
+        run: pip install bandit semgrep safety
+
+      - name: Bandit — Analyse statique Python
+        run: |
+          bandit -r app/ -f json -o bandit-report.json || true
+          bandit -r app/ -l   # Afficher les HIGH uniquement
+        continue-on-error: true
+
+      - name: Safety — Audit des dépendances
+        run: safety check -r requirements.txt --json > safety-report.json || true
+        continue-on-error: true
+
+      - name: Semgrep — Analyse multilangage
+        run: semgrep --config=p/security-audit app/ --json > semgrep-report.json || true
+        continue-on-error: true
+
+      - name: Upload rapports SAST
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-reports
+          path: |
+            bandit-report.json
+            safety-report.json
+            semgrep-report.json
+
+  # ── Job 4 : Build + Scan Trivy ────────────────────────────
+  build-and-scan:
+    name: "Build & Trivy Scan"
+    runs-on: ubuntu-latest
+    needs: [secret-scanning, lint-dockerfile]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Build image vulnérable (v1) ──
+      - name: Build image v1 (vulnérable)
+        run: docker build -t todo-app:v1-unsafe -f Dockerfile .
+
+      - name: Trivy — Scan image v1 (CVE)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'todo-app:v1-unsafe'
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'             # Ne bloque pas pour la v1 (vulnérable attendu)
+
+      - name: Trivy — Export rapport v1 JSON
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'todo-app:v1-unsafe'
+          format: 'json'
+          output: 'trivy-report-v1.json'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          exit-code: '0'
+
+      # ── Build image sécurisée (v2) ──
+      - name: Build image v2 (sécurisée)
+        run: docker build -t todo-app:v2-hardened -f Dockerfile.hardened .
+
+      - name: Trivy — Scan image v2 CRITICAL (bloquant)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'todo-app:v2-hardened'
+          format: 'sarif'
+          output: 'trivy-results-v2.sarif'
+          severity: 'CRITICAL'
+          exit-code: '1'             # ✅ Bloque si CVE CRITICAL détectée
+
+      - name: Trivy — Scan image v2 HIGH (warning)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'todo-app:v2-hardened'
+          format: 'json'
+          output: 'trivy-report-v2.json'
+          severity: 'HIGH'
+          exit-code: '0'
+
+      - name: Trivy — Scan secrets dans l image v2
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'todo-app:v2-hardened'
+          scanners: 'secret'
+          exit-code: '1'             # ✅ Bloque si secret détecté
+
+      - name: Upload SARIF vers GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results-v2.sarif'
+
+      - name: Upload rapports Trivy
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-reports
+          path: |
+            trivy-report-v1.json
+            trivy-report-v2.json
+
+  # ── Job 5 : Analyse des layers avec Dive ─────────────────
+  dive-analysis:
+    name: "Analyse layers (Dive)"
+    runs-on: ubuntu-latest
+    needs: [build-and-scan]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Installer Dive
+        run: |
+          wget -qO dive.deb \
+            https://github.com/wagoodman/dive/releases/latest/download/dive_0.12.0_linux_amd64.deb
+          sudo apt install ./dive.deb -y
+
+      - name: Build images
+        run: |
+          docker build -t todo-app:v1-unsafe -f Dockerfile .
+          docker build -t todo-app:v2-hardened -f Dockerfile.hardened .
+
+      - name: Dive — Analyse image v1
+        run: CI=true dive todo-app:v1-unsafe || true
+
+      - name: Dive — Analyse image v2
+        run: CI=true dive todo-app:v2-hardened
+
+      - name: Comparer les tailles d images
+        run: |
+          echo "=== Taille des images ==="
+          docker images todo-app --format "table {{.Tag}}\t{{.Size}}"
+
+  # ── Job 6 : Tests fonctionnels ────────────────────────────
+  functional-tests:
+    name: "Tests fonctionnels"
+    runs-on: ubuntu-latest
+    needs: [build-and-scan]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Installer les dépendances de test
+        run: pip install pytest requests flask flask-sqlalchemy
+
+      - name: Lancer les tests
+        run: pytest tests/ -v --tb=short
+
+  # ── Résumé final ──────────────────────────────────────────
+  security-summary:
+    name: "Résumé sécurité"
+    runs-on: ubuntu-latest
+    needs: [sast-scan, build-and-scan, dive-analysis, functional-tests]
+    if: always()
+
+    steps:
+      - name: Télécharger tous les rapports
+        uses: actions/download-artifact@v4
+
+      - name: Afficher le résumé
+        run: |
+          echo "=================================="
+          echo "   RÉSUMÉ SÉCURITÉ — Todo App     "
+          echo "=================================="
+          echo ""
+          echo "✅ Secret scanning    : ${{ needs.secret-scanning.result }}"
+          echo "✅ Lint Dockerfile    : ${{ needs.lint-dockerfile.result }}"
+          echo "✅ SAST (Bandit)      : ${{ needs.sast-scan.result }}"
+          echo "✅ Build & Trivy      : ${{ needs.build-and-scan.result }}"
+          echo "✅ Dive analysis      : ${{ needs.dive-analysis.result }}"
+          echo "✅ Functional tests   : ${{ needs.functional-tests.result }}"
+          echo ""
+          echo "Pipeline terminé — Vérifiez les artifacts pour les rapports détaillés."

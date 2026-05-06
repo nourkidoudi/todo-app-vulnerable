@@ -1,0 +1,93 @@
+# ============================================================
+# Dockerfile.hardened — VERSION SÉCURISÉE (Phase 3 du TP)
+# ============================================================
+# Corrections appliquées :
+#   ✅ Multi-stage build (builder + runner)
+#   ✅ Image de base minimale (python:3.11-slim)
+#   ✅ Version épinglée précisément
+#   ✅ Utilisateur non-root dédié
+#   ✅ .dockerignore adapté
+#   ✅ Secrets injectés via variables d'environnement (pas hardcodés)
+#   ✅ Serveur de production (gunicorn)
+#   ✅ Mode DEBUG désactivé
+#   ✅ HEALTHCHECK configuré
+#   ✅ Port non-privilégié (8080)
+#   ✅ Filesystem en lecture seule (via docker run --read-only)
+# ============================================================
+
+# ── Étape 1 : Builder ───────────────────────────────────────
+FROM python:3.11.9-slim AS builder
+
+WORKDIR /build
+
+# Installer uniquement les dépendances de build
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        gcc \
+        libffi-dev && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copier d'abord requirements pour profiter du cache Docker
+COPY requirements-secure.txt .
+
+# Installer les dépendances dans un répertoire utilisateur isolé
+RUN pip install --no-cache-dir --user -r requirements-secure.txt
+
+
+# ── Étape 2 : Runner (image finale minimale) ────────────────
+FROM python:3.11.9-slim AS runner
+
+# Metadonnées
+LABEL maintainer="Master DevOps"
+LABEL description="Todo App — Version sécurisée TP DevSecOps"
+LABEL version="2.0"
+
+# Créer un utilisateur non-root dédié
+RUN groupadd -r appgroup --gid 1001 && \
+    useradd -r -g appgroup --uid 1001 \
+            -d /app -s /sbin/nologin \
+            -c "Application User" appuser
+
+# Répertoire de travail
+WORKDIR /app
+
+# Copier les dépendances depuis le builder
+COPY --from=builder /root/.local /home/appuser/.local
+
+# Copier uniquement les fichiers nécessaires
+# (le .dockerignore exclut .git, .env, tests, etc.)
+COPY --chown=appuser:appgroup app/ ./app/
+
+# Créer le répertoire de données avec les bons droits
+RUN mkdir -p /app/data && chown appuser:appgroup /app/data
+
+# Variables d'environnement non sensibles
+ENV PYTHONPATH=/home/appuser/.local/lib/python3.11/site-packages
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV FLASK_ENV=production
+ENV FLASK_DEBUG=0
+
+# Basculer vers l'utilisateur non-root
+USER appuser
+
+# Port non-privilégié
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s \
+            --timeout=10s \
+            --start-period=10s \
+            --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" || exit 1
+
+# Serveur de production gunicorn
+CMD ["/home/appuser/.local/bin/gunicorn", \
+     "--bind", "0.0.0.0:8080", \
+     "--workers", "2", \
+     "--threads", "2", \
+     "--timeout", "30", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "app:create_app()"]

@@ -1,0 +1,30 @@
+# ============================================================
+# docker-compose.yml — VERSION VULNÉRABLE (Phase 1 & 2)
+# ============================================================
+version: '3.8'
+
+services:
+  todo-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: todo-app:v1-unsafe
+    container_name: todo-unsafe
+    ports:
+      - "5000:5000"
+    environment:
+      # ❌ Secrets en dur dans le docker-compose
+      - SECRET_KEY=hardcoded-secret-key-do-not-use-123
+      - ADMIN_API_KEY=admin-key-12345
+      - JWT_SECRET=jwt-secret-hardcoded
+      - FLASK_DEBUG=1
+      - FLASK_ENV=development
+    volumes:
+      # ❌ Montage du répertoire complet (inclut les secrets)
+      - .:/app
+      # ❌ Socket Docker monté — donne accès complet au daemon Docker !
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    # ❌ Pas de limites de ressources
+    # ❌ Pas de réseau isolé
+    # ❌ Pas de security_opt

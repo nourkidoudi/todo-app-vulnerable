@@ -1,0 +1,26 @@
+# ============================================================
+# requirements.txt — VERSIONS VOLONTAIREMENT VULNÉRABLES
+# Ne pas utiliser en production !
+# ============================================================
+
+Flask==2.0.3
+Flask-SQLAlchemy==2.5.1
+Werkzeug==2.0.3
+
+# ❌ requests 2.18.0 — CVE-2023-32681 (SSRF)
+requests==2.18.0
+
+# ❌ Pillow 8.2.0 — CVE-2022-22817 (buffer overflow)
+Pillow==8.2.0
+
+# ❌ PyYAML 5.3.1 — CVE-2020-14343 (deserialization)
+PyYAML==5.3.1
+
+# ❌ urllib3 1.25.9 — CVE-2020-26137 (header injection)
+urllib3==1.25.9
+
+# ❌ cryptography 3.2.0 — CVE-2020-25659 (Bleichenbacher RSA)
+cryptography==3.2.0
+
+# Production server (intentionnellement absent du Dockerfile v1)
+gunicorn==20.1.0

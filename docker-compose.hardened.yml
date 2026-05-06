@@ -1,0 +1,81 @@
+# ============================================================
+# docker-compose.hardened.yml — VERSION SÉCURISÉE (Phase 3)
+# ============================================================
+version: '3.8'
+
+services:
+  todo-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.hardened
+    image: todo-app:v2-hardened
+    container_name: todo-hardened
+    ports:
+      - "8080:8080"
+
+    environment:
+      # ✅ Secrets injectés depuis le fichier .env (jamais commité)
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:////app/data/todos.db}
+      - FLASK_ENV=production
+      - FLASK_DEBUG=0
+
+    # ✅ Filesystem en lecture seule
+    read_only: true
+
+    # ✅ /tmp accessible en mémoire uniquement (noexec, nosuid)
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=50m
+      - /app/data:rw,noexec,nosuid,size=100m
+
+    # ✅ Pas d'escalade de privilèges
+    security_opt:
+      - no-new-privileges:true
+      - apparmor:docker-default
+
+    # ✅ Suppression de toutes les capabilities Linux
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE   # Seulement si port < 1024 nécessaire
+
+    # ✅ Utilisateur non-root
+    user: "1001:1001"
+
+    # ✅ Limites de ressources
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 64M
+
+    # ✅ Health check
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    restart: unless-stopped
+
+    networks:
+      - app-network
+
+    volumes:
+      - app-data:/app/data
+
+    # ✅ Pas de montage du socket Docker
+    # ✅ Pas de montage du répertoire source complet
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  app-data:
+    driver: local

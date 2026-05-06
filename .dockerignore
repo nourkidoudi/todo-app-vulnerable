@@ -1,0 +1,74 @@
+# ============================================================
+# .dockerignore — Fichiers à exclure du contexte Docker
+# ============================================================
+
+# Contrôle de version
+.git
+.gitignore
+.gitattributes
+
+# Secrets et configuration locale
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+secrets/
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.egg-info
+.eggs
+dist/
+build/
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+*.pyc
+
+# Tests
+tests/
+test_*.py
+*_test.py
+pytest.ini
+.pytest_cache/
+coverage.xml
+.coverage
+htmlcov/
+
+# Base de données locale
+*.db
+*.sqlite
+*.sqlite3
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# CI/CD
+.github/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Docker
+Dockerfile*
+docker-compose*
+.hadolint.yaml

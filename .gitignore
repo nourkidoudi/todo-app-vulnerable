@@ -1,0 +1,89 @@
+# ============================================================
+# .gitignore — Fichiers à ne jamais commiter
+# ============================================================
+
+# ── SECRETS (CRITIQUE) ──────────────────────────────────────
+.env
+.env.local
+.env.production
+.env.staging
+*.key
+*.pem
+*.p12
+secrets/
+credentials/
+
+# ── PYTHON ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# ── BASE DE DONNÉES ──────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+instance/
+
+# ── ENVIRONNEMENTS VIRTUELS ──────────────────────────────────
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# ── IDE ──────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── OS ───────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ── LOGS ─────────────────────────────────────────────────────
+*.log
+logs/
+*.log.*
+
+# ── DOCKER ───────────────────────────────────────────────────
+# Ne pas ignorer les Dockerfiles (nécessaires pour le TP)
+
+# ── RAPPORTS DE SÉCURITÉ ─────────────────────────────────────
+trivy-report*.json
+bandit-report*.json
+semgrep-report*.json
+hadolint-report*.json
+safety-report*.json
+*-results.sarif

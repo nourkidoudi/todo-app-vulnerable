@@ -1,0 +1,15 @@
+# ============================================================
+# .hadolint.yaml — Configuration Hadolint
+# ============================================================
+failure-threshold: error
+
+ignore:
+  # Ignorer DL3008 (versions apt) seulement pour le Dockerfile de TP
+  # En production, toujours spécifier les versions !
+  # - DL3008
+
+trustedRegistries:
+  - docker.io
+  - ghcr.io
+
+format: tty

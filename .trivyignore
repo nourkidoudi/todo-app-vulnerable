@@ -1,0 +1,12 @@
+# ============================================================
+# .trivyignore — CVE à ignorer (faux positifs documentés)
+# ============================================================
+# Format : CVE-ID  # Commentaire obligatoire expliquant pourquoi
+
+# Exemple (à décommenter si nécessaire) :
+# CVE-XXXX-XXXXX  # Faux positif — non applicable à notre usage
+
+# ============================================================
+# trivy.yaml — Configuration Trivy
+# ============================================================
+# Pour utiliser : trivy image --config trivy.yaml todo-app:v1-unsafe
