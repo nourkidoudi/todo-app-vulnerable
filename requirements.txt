@@ -11,7 +11,7 @@ Werkzeug==2.0.3
 requests==2.18.0
 
 # ❌ Pillow 8.2.0 — CVE-2022-22817 (buffer overflow)
-Pillow==8.2.0
+Pillow==13.0.0
 
 # ❌ PyYAML 5.3.1 — CVE-2020-14343 (deserialization)
 PyYAML==5.3.1
